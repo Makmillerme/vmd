@@ -36,28 +36,40 @@ def check_and_setup_venv():
     
     return venv_python
 
+def is_env_configured() -> bool:
+    """True if .env file exists or Docker/compose already injected credentials."""
+    if Path(".env").exists():
+        return True
+    return bool(os.environ.get("IMAP_USER") and os.environ.get("IMAP_PASS"))
+
+
 def check_env_file():
-    """Перевірка наявності .env файлу"""
-    env_file = Path(".env")
-    if not env_file.exists():
-        print("="*60)
-        print("УВАГА: Файл .env не знайдено!")
-        print("="*60)
-        print("Створіть файл .env в корені проекту з наступним вмістом:")
-        print()
-        print("IMAP_HOST=imap.ukr.net")
-        print("IMAP_PORT=993")
-        print("IMAP_USER=your_mail@ukr.net")
-        print("IMAP_PASS=your_imap_app_password")
-        print("MIN_SIZE_KB=280")
-        print("MAX_SIZE_KB=320")
-        print("="*60)
-        print()
-        
-        response = input("Продовжити без .env файлу? (y/n): ").strip().lower()
-        if response != 'y':
-            print("Завершено. Створіть .env файл та запустіть скрипт знову.")
-            sys.exit(1)
+    """Перевірка наявності .env файлу або змінних середовища (Docker env_file)."""
+    if is_env_configured():
+        return
+
+    print("=" * 60)
+    print("УВАГА: Файл .env не знайдено і IMAP_* не задані в середовищі!")
+    print("=" * 60)
+    print("Створіть файл .env в корені проекту або задайте IMAP_USER/IMAP_PASS.")
+    print("=" * 60)
+    print()
+
+    if not sys.stdin.isatty():
+        print("Завершено (неінтерактивний режим, напр. Docker).")
+        sys.exit(1)
+
+    response = input("Продовжити без .env файлу? (y/n): ").strip().lower()
+    if response != "y":
+        print("Завершено. Створіть .env файл та запустіть скрипт знову.")
+        sys.exit(1)
+
+
+def get_runtime_python() -> Path:
+    """Python для запуску extractor: venv локально, system python у Docker."""
+    if os.environ.get("VMD_DOCKER") == "1":
+        return Path(sys.executable)
+    return check_and_setup_venv()
 
 def main():
     """Головна функція"""
@@ -65,7 +77,7 @@ def main():
     check_env_file()
     
     # Налаштування venv
-    venv_python = check_and_setup_venv()
+    venv_python = get_runtime_python()
     
     # Якщо є аргументи командного рядка - запускаємо extractor напряму
     if len(sys.argv) > 1:

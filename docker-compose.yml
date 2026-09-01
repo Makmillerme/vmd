@@ -14,9 +14,11 @@ services:
       PYTHONUNBUFFERED: "1"
       PYTHONIOENCODING: utf-8
       TZ: Europe/Kyiv
+      VMD_DOCKER: "1"
     volumes:
       - vmd_data:/app/vmd_extractor/data
       - vmd_logs:/app/vmd_logs
+      - ./.env:/app/.env:ro
     # Daemon: 08/12/16/20 pipeline + Monday 09:00 weekly report
     command: ["daemon"]
 

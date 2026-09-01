@@ -16,7 +16,7 @@ from datetime import date, datetime, timedelta, time as dt_time
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from run import check_and_setup_venv, check_env_file
+from run import check_env_file, get_runtime_python
 from vmd_extractor.config import LOCAL_TZ
 
 # Щоденна перевірка ВМД (4 рази)
@@ -153,7 +153,7 @@ def perform_health_check(max_age_hours: int):
 def run_pipeline_once():
     """Запускає pipeline один раз"""
     check_env_file()
-    venv_python = check_and_setup_venv()
+    venv_python = get_runtime_python()
 
     auto_from, auto_to = determine_auto_range()
     print(f"Автономний діапазон: від {auto_from.isoformat()} до {auto_to.isoformat()}")
