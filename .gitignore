@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Environment variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime data (do not commit)
+vmd_extractor/data/db/
+vmd_extractor/data/pdf/
+vmd_extractor/data/files/
+vmd_extractor/data/brief/
+vmd_extractor/data/temp_extracted/
+vmd_extractor/data/extract_data/
+
+# Legacy paths
+vmd_extractor/files/
+vmd_extractor/extract_data/
+vmd_extractor/temp_extracted/
+
+# Logs
+*.log
+vmd_logs/
+
+# Cursor local tools (not part of project)
+.cursor/tools/
+.cursor/debug-*.log
+
+# Serena agent cache (keep project.yml if needed)
+.serena/cache/
+.serena/memories/
+
+# Temporary files
+*.tmp
+*.bak
+
+vmd_extractor/data.zip

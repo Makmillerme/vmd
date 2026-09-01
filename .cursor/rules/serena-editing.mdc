@@ -1,0 +1,48 @@
+---
+description: Використовувати Serena MCP для редагування коду замість ручних інструментів
+alwaysApply: true
+---
+
+# Serena-first editing
+
+Усі зміни коду в **цільовому** застосунку репозиторію виконуй через **Serena MCP** (user-serena), а не через search_replace або write. За замовчуванням це **vmd** (`d:\Project\mtruck\vmd`); якщо задача явно в іншому підпроєкті — активуй відповідну назву або **абсолютний шлях** в `activate_project`. Файли **поза** зареєстрованим проєктом Serena (наприклад лише `.cursor/`) редагуй стандартними інструментами редактора.
+
+## Обовʼязковий крок
+
+Перед редагуванням коду — активуй проєкт (не чекай команди /serena):
+`call_mcp_tool` server=user-serena, tool=activate_project, args={"project": "d:\\Project\\mtruck\\vmd"}`
+
+## Проєкт
+
+- **Назва:** vmd
+- **Шлях:** d:\Project\mtruck\vmd
+- **relative_path** для інструментів: відносно шляху проєкту (напр. `vmd_extractor/core/database.py`)
+
+## Активні інструменти
+
+| Задача | Інструмент | Ключові параметри |
+|--------|------------|-------------------|
+| Активація | activate_project | project: "d:\\Project\\mtruck\\vmd" |
+| Пошук символу | find_symbol | name_path_pattern, relative_path?, include_body? |
+| Огляд файлу | get_symbols_overview | relative_path |
+| Заміна тіла | replace_symbol_body | name_path, relative_path, body |
+| Вставка після | insert_after_symbol | name_path, relative_path, body |
+| Вставка перед | insert_before_symbol | name_path, relative_path, body |
+| Regex/рядкова заміна | replace_content | relative_path, needle, repl, mode (literal\|regex) |
+| Пошук посилань | find_referencing_symbols | — |
+| Пошук патерну | search_for_pattern | — |
+| Перейменування | rename_symbol | — |
+| Читання/запис файлу | read_file, create_text_file | — |
+| Памʼять | write_memory, read_memory, edit_memory | memory_name, content |
+
+## name_path (Python)
+
+Шлях у дереві символів у файлі. Приклади:
+- `VMDDatabase` — клас
+- `VMDDatabase/persist_pipeline_run` — метод у класі
+- `AsyncVMDOrchestrator/run` — метод оркестратора
+- `/ExactMatch` — точний збіг (absolute)
+
+## Fallback
+
+Якщо інструменти Serena недоступні — використовуй search_replace, записуй зміни в `.serena/memories/` вручну.

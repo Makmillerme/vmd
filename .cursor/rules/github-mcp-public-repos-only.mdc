@@ -1,0 +1,30 @@
+# GitHub MCP — тільки публічні репозиторії
+
+## Права MCP (user-github)
+
+Токен GitHub MCP у цьому проєкті має **лише**:
+
+- **create_repository** — створення репо
+- **read** — пошук, читання файлів, commits тощо
+
+**Немає:** зміни visibility (private → public), видалення репо, `docker login ghcr.io` через MCP, запис у `.github/workflows/` (GitHub блокує).
+
+## Обовʼязкова політика
+
+1. **Завжди створюй репозиторії з `private: false`.** Ніколи не створюй private, якщо користувач не попросив явно і не розуміє обмежень.
+2. **Не покладайся на workflow для зміни visibility** — MCP не може перевести існуючий private repo у public.
+3. Якщо потрібен public repo, а імʼя зайняте private-репо — **створи новий public** (напр. `vmd`) через `create_repository`, а не «оживляй» private.
+4. **Workflow-файли** (`.github/workflows/*`) пушити через **локальний git**, не через MCP `create_or_update_file` / `push_files` (404 на `.github/`).
+5. **Деплой на сервер:** public repo → `git clone` без credentials; public GHCR → `docker compose pull` без login.
+
+## Поточний canonical repo
+
+- **Проєкт:** vmd (`d:\Project\mtruck\vmd`)
+- **GitHub:** public repo перед першим push (якщо ще немає)
+
+## Перед деплоєм перевір
+
+```text
+search_repositories query: repo:Makmillerme/vmd
+→ items[0].private === false
+```

@@ -1,0 +1,210 @@
+<!-- URL: https://script.google.com/macros/s/AKfycbwWZiCPUTgU1iXhLng87idMkzhoau_ZZBBv4zRatk04FQ1mV1240zz9E0FgpjN7VsM/exec -->
+<!-- Secret: GXPgEI5V8kXyzfPz2wUy -->
+
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Завантаження IMFX файлів</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .card { background: white; border-radius: 1rem; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        pre { scrollbar-width: thin; scrollbar-color: #cbd5e1 #f1f5f9; }
+        .tab-active { border-bottom: 2px solid #2563eb; color: #2563eb; }
+        @keyframes pulse-once {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+            100% { transform: scale(1); }
+        }
+        .animate-pulse-once {
+            animation: pulse-once 0.5s ease-in-out;
+        }
+    </style>
+</head>
+<body class="min-h-screen py-8 px-4 flex items-center justify-center">
+    <div class="max-w-2xl w-full card p-8">
+        <div class="text-center mb-8">
+            <h1 class="text-2xl font-bold text-gray-900">Менеджер завантажень .imfx</h1>
+            <p class="text-gray-500 text-sm mt-2">Оберіть спосіб отримання файлу</p>
+        </div>
+
+        <!-- Перемикач режимів -->
+        <div class="flex border-b border-gray-200 mb-6">
+            <button id="tabQuick" class="flex-1 py-3 text-sm font-semibold tab-active">Швидке посилання</button>
+            <button id="tabApi" class="flex-1 py-3 text-sm font-semibold text-gray-500">Перевірка через API (Logs)</button>
+        </div>
+
+        <div class="space-y-5">
+            <!-- Секція API (прихована за замовчуванням) -->
+            <div id="apiFields" class="hidden space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-500 uppercase mb-1 text-gray-400">Метод (Action)</label>
+                    <select id="apiAction" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all appearance-none bg-white">
+                        <option value="getFile">getFile (Отримати конкретний файл)</option>
+                        <option value="list">list (Отримати список файлів)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-500 uppercase mb-1 text-gray-400">Web App URL</label>
+                    <input type="text" id="apiUrl" placeholder="https://script.google.com/macros/s/.../exec" 
+                           class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-500 uppercase mb-1 text-gray-400">Секретний ключ</label>
+                    <input type="password" id="apiKey" placeholder="Ваш ключ" 
+                           class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all">
+                </div>
+            </div>
+
+            <!-- Спільне поле для ID -->
+            <div id="fileIdContainer">
+                <label class="block text-xs font-semibold text-gray-500 uppercase mb-1 text-gray-400">ID Файлу з Google Drive</label>
+                <input type="text" id="fileId" placeholder="Наприклад: 17MYUhG4..." 
+                       class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all">
+            </div>
+
+            <button id="mainBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2">
+                <span id="btnText">Згенерувати посилання</span>
+                <div id="loader" class="hidden animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+            </button>
+        </div>
+
+        <!-- Секція завантаження (ТІЛЬКИ для Швидкого посилання) -->
+        <div id="downloadSection" class="hidden mt-8 p-6 bg-green-50 border border-green-200 rounded-2xl text-center animate-pulse-once">
+            <p class="text-sm text-green-800 mb-4 font-medium">Файл готовий до прямого завантаження:</p>
+            <a id="directLink" href="#" target="_blank" class="inline-flex items-center justify-center gap-3 bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-10 rounded-2xl shadow-xl transition-all">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                СКАЧАТИ .IMFX
+            </a>
+            <p id="modeInfo" class="mt-4 text-[10px] text-green-600 font-medium uppercase tracking-widest"></p>
+        </div>
+
+        <!-- JSON Output (ТІЛЬКИ для режиму API) -->
+        <div id="outputSection" class="hidden mt-6 space-y-2">
+            <p class="text-[10px] font-bold text-gray-400 uppercase px-1 tracking-widest text-center">Відповідь сервера (JSON)</p>
+            <div class="relative group">
+                <pre id="output" class="bg-slate-900 text-green-400 p-4 rounded-xl overflow-x-auto text-xs max-h-[300px] shadow-inner font-mono"></pre>
+            </div>
+        </div>
+
+        <!-- Error Message -->
+        <div id="errorMsg" class="hidden mt-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-medium"></div>
+    </div>
+
+    <script>
+        const mainBtn = document.getElementById('mainBtn');
+        const btnText = document.getElementById('btnText');
+        const loader = document.getElementById('loader');
+        const apiFields = document.getElementById('apiFields');
+        const apiAction = document.getElementById('apiAction');
+        const fileIdContainer = document.getElementById('fileIdContainer');
+        const tabQuick = document.getElementById('tabQuick');
+        const tabApi = document.getElementById('tabApi');
+        const downloadSection = document.getElementById('downloadSection');
+        const directLink = document.getElementById('directLink');
+        const modeInfo = document.getElementById('modeInfo');
+        const outputSection = document.getElementById('outputSection');
+        const errorMsg = document.getElementById('errorMsg');
+        const fileIdInput = document.getElementById('fileId');
+
+        let mode = 'quick'; // 'quick' або 'api'
+
+        // Приховування/показ поля ID залежно від методу в API
+        function updateIdVisibility() {
+            if (mode === 'api' && apiAction.value === 'list') {
+                fileIdContainer.classList.add('hidden');
+            } else {
+                fileIdContainer.classList.remove('hidden');
+            }
+        }
+
+        apiAction.addEventListener('change', updateIdVisibility);
+
+        // Перемикання вкладок
+        tabQuick.addEventListener('click', () => {
+            mode = 'quick';
+            tabQuick.className = 'flex-1 py-3 text-sm font-semibold tab-active';
+            tabApi.className = 'flex-1 py-3 text-sm font-semibold text-gray-500 transition-colors';
+            apiFields.classList.add('hidden');
+            outputSection.classList.add('hidden');
+            downloadSection.classList.add('hidden');
+            btnText.textContent = 'Згенерувати посилання';
+            updateIdVisibility();
+        });
+
+        tabApi.addEventListener('click', () => {
+            mode = 'api';
+            tabApi.className = 'flex-1 py-3 text-sm font-semibold tab-active';
+            tabQuick.className = 'flex-1 py-3 text-sm font-semibold text-gray-500 transition-colors';
+            apiFields.classList.remove('hidden');
+            downloadSection.classList.add('hidden');
+            btnText.textContent = 'Виконати запит та логування';
+            updateIdVisibility();
+        });
+
+        mainBtn.addEventListener('click', async () => {
+            const fileId = fileIdInput.value.trim();
+            
+            if (mode === 'quick' || (mode === 'api' && apiAction.value === 'getFile')) {
+                if (!fileId) { alert('Будь ласка, введіть ID файлу!'); return; }
+            }
+
+            errorMsg.classList.add('hidden');
+            downloadSection.classList.add('hidden');
+            outputSection.classList.add('hidden');
+            
+            if (mode === 'quick') {
+                const driveUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+                directLink.href = driveUrl;
+                modeInfo.textContent = "Сформовано миттєво без звернення до API";
+                downloadSection.classList.remove('hidden');
+            } else {
+                const url = document.getElementById('apiUrl').value.trim();
+                const key = document.getElementById('apiKey').value.trim();
+                const action = apiAction.value;
+                
+                if (!url || !key) { alert('Вкажіть URL веб-додатка та секретний ключ!'); return; }
+                
+                setLoading(true);
+                try {
+                    let finalUrl = `${url}?key=${encodeURIComponent(key)}&action=${action}`;
+                    if (action === 'getFile') {
+                        finalUrl += `&id=${encodeURIComponent(fileId)}`;
+                    }
+                    
+                    const response = await fetch(finalUrl, { redirect: 'follow' });
+                    const data = await response.json();
+                    
+                    document.getElementById('output').textContent = JSON.stringify(data, null, 2);
+                    outputSection.classList.remove('hidden');
+                    
+                    if (action === 'getFile' && !data.error) {
+                        modeInfo.textContent = "Статус у таблиці оновлено (DOWNLOADED)";
+                    } else if (action === 'list') {
+                        modeInfo.textContent = "Список успішно отримано";
+                    }
+                } catch (err) {
+                    errorMsg.textContent = "Помилка підключення: " + err.message + ". Перевірте CORS та налаштування доступу 'Anyone'.";
+                    errorMsg.classList.remove('hidden');
+                } finally {
+                    setLoading(false);
+                }
+            }
+        });
+
+        function setLoading(isLoading) {
+            mainBtn.disabled = isLoading;
+            loader.classList.toggle('hidden', !isLoading);
+            btnText.textContent = isLoading ? 'Очікування відповіді...' : (mode === 'quick' ? 'Згенерувати посилання' : 'Виконати запит та логування');
+            mainBtn.className = isLoading 
+                ? "w-full bg-blue-400 text-white font-bold py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-not-allowed"
+                : "w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2";
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,94 @@
+---
+description: PostgressOps server and PostgreSQL management playbook (VMD Extractor context)
+alwaysApply: true
+---
+
+# PostgressOps Operator Rule
+
+## Role
+
+- Act as a production operator for `PostgressOps` stack on the server.
+- Prioritize safety, data integrity, and deterministic operations.
+- Execute actions through MCP/SSH with explicit verification.
+
+## VMD Extractor Context (this repo)
+
+| Item | Value |
+|------|-------|
+| **App type** | Python CLI (async IMAP → parse → SQLite → Trello) |
+| **App DB** | **SQLite** `vmd_extractor/data/db/vmd_data.sqlite3` — primary, local to app |
+| **Server deploy path** | `/opt/vmd` (systemd: `vmd-extractor.timer`, `vmd-mailing.timer`) |
+| **Postgres DB on stack** | `vmd_parser` (owner `vmd_parser`, ~9 MB) — **not used by current CLI** |
+| **Other DBs on same stack** | `fitapp`, `mtruck`, `mtruck_nextjs`, `mtrucklending` — unrelated apps |
+
+**Rule:** Do not assume VMD needs Postgres operations. Use postgres-ops for:
+- Stack health / backups before server maintenance
+- Future migration to Postgres (only when user explicitly requests)
+- Inspecting `vmd_parser` schema/data via read-only `run_sql`
+
+## Source Of Truth
+
+- Main project path on server: `/root/apps/PostgressOps`
+- Stack paths:
+  - `docker/.env`
+  - `docker/docker-compose.yml`
+  - `scripts/*.sh`
+  - `tools/mcp-postgres-ops/src/index.js`
+
+## Mandatory Workflow
+
+1. Check current state first (health, containers, connectivity).
+2. Execute one operation at a time.
+3. Re-check health after each operation.
+4. Report concise outcome + next safe step.
+
+## Safety Rules
+
+- Never run destructive operations without explicit user confirmation:
+  - `scripts/clean-install.sh --yes`
+  - `drop_database(confirm=true)` — especially **`vmd_parser`**
+  - `drop_role(confirm=true)`
+- Never leak secrets unless user explicitly asks to expose them.
+- For any path rename/migration, update:
+  - MCP runtime path in `~/.cursor/mcp.json`
+  - `STACK_DIR` and `SCRIPTS_DIR` in MCP `.env`
+
+## Preferred Operations
+
+- Stack update/bootstrap: `bash scripts/server-update.sh`
+- Non-destructive refresh: `bash scripts/reinstall.sh`
+- Full wipe reinstall (confirmed only): `bash scripts/clean-install.sh --yes`
+- Quick health: `bash scripts/healthcheck.sh`
+- Provision DB + role: `bash scripts/provision-db.sh <db> <user> <pass>`
+
+## MCP Capabilities Baseline
+
+- SQL/DB operations:
+  - `healthcheck_stack`
+  - `list_databases`, `list_roles`
+  - `create_database`, `drop_database`
+  - `create_role`, `drop_role`, `rotate_role_password`
+  - `map_pgbouncer_database`, `reload_pgbouncer`
+  - `run_backup_now`, `run_sql`
+- Script operations:
+  - `run_healthcheck`
+  - `run_install`
+  - `run_reinstall`
+  - `run_upgrade`
+  - `run_provision_db`
+
+## VMD-Specific Examples
+
+- **Health before deploy:** `healthcheck_stack` → deploy to `/opt/vmd` → verify systemd timers
+- **Inspect vmd_parser:** `run_sql` with `db_name: vmd_parser`, SELECT-only queries
+- **Backup before migration:** `run_backup_now` when planning SQLite → Postgres migration
+- **Do NOT:** recreate `vmd_parser` or rotate its password without user confirmation
+
+## Response Format
+
+- Always include:
+  - What was checked
+  - What was changed
+  - Current status (`OK` / `WARN` / `FAIL`)
+  - Whether change affects **SQLite app** or **Postgres stack only**
+  - Exact next command or next action

@@ -1,0 +1,16 @@
+[Unit]
+Description=VMD Extractor — автоматична перевірка та завантаження ВМД
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/vmd
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/opt/vmd/.env
+ExecStart=/opt/vmd/venv/bin/python /opt/vmd/run_auto.py --once
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

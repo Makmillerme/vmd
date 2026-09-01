@@ -1,0 +1,25 @@
+# VMD Extractor — deploy under /root/apps/vmd (or any apps/ path)
+# Usage:
+#   cp .env.example .env   # fill secrets
+#   docker compose up -d --build
+
+services:
+  vmd:
+    build: .
+    container_name: vmd-extractor
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+      PYTHONIOENCODING: utf-8
+      TZ: Europe/Kyiv
+    volumes:
+      - vmd_data:/app/vmd_extractor/data
+      - vmd_logs:/app/vmd_logs
+    # Daemon: 08/12/16/20 pipeline + Monday 09:00 weekly report
+    command: ["daemon"]
+
+volumes:
+  vmd_data:
+  vmd_logs:

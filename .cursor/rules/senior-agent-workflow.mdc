@@ -1,0 +1,73 @@
+---
+description: Пайплайн Plan+/plan → Agent+/serena; /docs, /audit, /PostgresOps; термінал, стек, MCP
+alwaysApply: true
+---
+
+# Робочий процес агента (рівень сіньйора)
+
+Ти **сам** ініціюєш потрібні режими та команди; користувач може додатково нагадати `/plan`, `/serena`, `/docs`, `/audit`, `/PostgresOps`.
+
+## Якірний стек проєкту (VMD Extractor)
+
+- **Python 3.10+**, async (`asyncio`, `aiohttp`, `aiosqlite`).
+- **CLI:** `run.py`, `run_auto.py`, меню в `vmd_extractor/cli/`.
+- **Пайплайн:** IMAP → .imfx → XML parse → **SQLite** → Trello / Excel / email.
+- **Конфіг:** `.env` + `vmd_extractor/config.py`.
+- **Деплой:** `/opt/vmd`, systemd timers (`deploy/systemd/`).
+- **PostgreSQL (сервер):** stack PostgressOps, БД `vmd_parser` — **не** використовується поточним CLI; операції через **`/PostgresOps`**.
+- Перед порадами по бібліотеках перевір версії у [`requirements.txt`](requirements.txt).
+
+## Документація та факти
+
+- **Не вигадуй** сигнатури й поведінку: код репо → офіційна дока **відповідної версії** → `web_search` / `WebFetch`.
+- Див. також команду **`/docs`**.
+
+## Фаза планування: **Plan** + **`/plan`**
+
+1. Увімкни **режим Plan** або **`SwitchMode`** з `target_mode_id: "plan"`.
+2. Для складних задач — **sequential-thinking MCP** (`user-sequential-thinking`).
+3. У **Plan** не роби масових правок коду до узгодження.
+
+## Закриття планування → розробка
+
+1. Підсумуй узгоджений план.
+2. Перемкни на **Agent**.
+3. Реалізація через **`/serena`**.
+
+## Фаза розробки: **`/serena`**
+
+1. Дотримуйся [`serena-editing.mdc`](serena-editing.mdc): **`activate_project`** → `d:\Project\mtruck\vmd`.
+2. Усі правки коду в `vmd_extractor/` — через **Serena**.
+3. Після суттєвих змін — **`write_memory`**.
+
+## Команда **`/docs`**
+
+- Версії з `requirements.txt`; офіційна дока Python-бібліотек (pandas, aiohttp, aiosqlite, python-dotenv).
+
+## Команда **`/audit`**
+
+- Застосовуй для **Python CLI**: async/await коректність, I/O блокування, SQLite транзакції, Trello rate limits, обробка Ctrl+C, логування.
+- **next-devtools** — не застосовується (немає Next.js).
+
+## Команда **`/PostgresOps`**
+
+- Операції PostgreSQL stack на сервері; не плутати з SQLite додатку.
+- Див. [`PostgresOps.md`](../commands/PostgresOps.md) та [`postgressops-server-operator.mdc`](postgressops-server-operator.mdc).
+
+## Термінал і помилки
+
+- Читай `terminals/` для stack trace та exit code.
+- Команди в **PowerShell** (Windows).
+- **Не** запускай довгоживучі процеси (`run_auto.py` daemon) без явного прохання.
+- **Дозволено:** короткі тести (`python run_auto.py --once`, `--health-check`).
+
+## MCP: дисципліна
+
+- **user-serena** — код і памʼять (`vmd`).
+- **user-postgres-ops** — серверний Postgres stack.
+- **user-trello** — дошки та картки.
+- **user-sequential-thinking** — глибокий план.
+
+## Поведінка щодо користувача
+
+- Один структурований блок уточнень, якщо без нього неможливо; далі автономно в межах ухваленого.
