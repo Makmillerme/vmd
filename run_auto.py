@@ -9,6 +9,7 @@
 
 import argparse
 import asyncio
+import os
 import subprocess
 import sys
 import time
@@ -26,8 +27,17 @@ PIPELINE_RUN_TIMES: List[dt_time] = [
     dt_time(16, 0),
     dt_time(20, 0),
 ]
+# Trello — один раз на день, після останнього пошукового прогону
+LAST_PIPELINE_TIME = max(PIPELINE_RUN_TIMES)
 # Тижнева розсилка — понеділок
 WEEKLY_REPORT_TIME = dt_time(9, 0)
+
+
+def should_sync_trello_now(scheduled_time: Optional[dt_time] = None) -> bool:
+    """Trello тільки після останнього слоту воронки (20:00)."""
+    if scheduled_time is not None:
+        return scheduled_time.replace(second=0, microsecond=0) == LAST_PIPELINE_TIME
+    return datetime.now(LOCAL_TZ).time() >= LAST_PIPELINE_TIME
 
 
 def _parse_iso_date(iso_value: Optional[str]) -> Optional[datetime]:
@@ -150,7 +160,7 @@ def perform_health_check(max_age_hours: int):
     sys.exit(0)
 
 
-def run_pipeline_once():
+def run_pipeline_once(enable_trello: Optional[bool] = None):
     """Запускає pipeline один раз"""
     check_env_file()
     venv_python = get_runtime_python()
@@ -165,6 +175,9 @@ def run_pipeline_once():
         print(f"Помилка: файл {extractor_script} не знайдено!")
         return 1
 
+    if enable_trello is None:
+        enable_trello = should_sync_trello_now()
+
     cmd = [
         str(venv_python),
         str(extractor_script),
@@ -172,7 +185,20 @@ def run_pipeline_once():
         auto_from.isoformat(),
         "--to",
         auto_to.isoformat(),
+        "--auto-update",
     ]
+
+    if not enable_trello:
+        cmd.append("--skip-trello")
+        print(
+            f"Trello: пропущено (синхронізація раз на день після "
+            f"{LAST_PIPELINE_TIME.strftime('%H:%M')})"
+        )
+    elif os.environ.get("VMD_SYNC_EXISTING_TRELLO_CARDS", "false").lower() == "true":
+        cmd.append("--sync-existing-trello")
+        print("Trello: увімкнено повну синхронізацію існуючих карток (VMD_SYNC_EXISTING_TRELLO_CARDS=true)")
+    else:
+        print("Trello: нові/несинхронізовані картки після останнього прогону воронки")
 
     try:
         result = subprocess.run(cmd, check=False)
@@ -291,7 +317,9 @@ def run_scheduled_mode():
         if event_type == "weekly_report":
             exit_code = run_weekly_report_once()
         else:
-            exit_code = run_pipeline_once()
+            exit_code = run_pipeline_once(
+                enable_trello=should_sync_trello_now(scheduled_time=next_run.time())
+            )
 
         if exit_code != 0:
             print(f"\nПомилка виконання (код: {exit_code})")

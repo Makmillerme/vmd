@@ -1200,17 +1200,17 @@ class VMDDatabase:
                 query += """
                     AND (
                         (v.create_at_ccd IS NOT NULL AND v.create_at_ccd >= ?)
-                        OR (v.create_at_ccd IS NULL AND DATE(v.created_at) >= ?)
+                        OR (DATE(v.created_at) >= ?)
                     )
                 """
                 params.extend([date_from_date_only, date_from_date_only])
-            
+
             if date_to:
                 date_to_date_only = date_to[:10] if len(date_to) >= 10 else date_to
                 query += """
                     AND (
                         (v.create_at_ccd IS NOT NULL AND v.create_at_ccd <= ?)
-                        OR (v.create_at_ccd IS NULL AND DATE(v.created_at) <= ?)
+                        OR (DATE(v.created_at) <= ?)
                     )
                 """
                 params.extend([date_to_date_only, date_to_date_only])

@@ -100,7 +100,22 @@ def parse_arguments():
         action="store_true",
         help="Не сортувати повідомлення по даті (за замовчуванням: сортування увімкнено, від новіших до старіших)"
     )
-    
+    parser.add_argument(
+        "--skip-trello",
+        action="store_true",
+        help="Зберегти дані лише в БД, без синхронізації з Trello",
+    )
+    parser.add_argument(
+        "--sync-existing-trello",
+        action="store_true",
+        help="Оновити всі існуючі картки Trello з БД (повільно; за замовч. лише нові/несинхронізовані)",
+    )
+    parser.add_argument(
+        "--auto-update",
+        action="store_true",
+        help="Автономний режим: при відсутності нових листів все одно оновлює БД, Excel і Trello",
+    )
+
     return parser.parse_args()
 
 
@@ -161,37 +176,52 @@ async def main():
     print("="*60)
     print()
     
+    skip_trello = args.skip_trello
+    sync_existing_trello = args.sync_existing_trello
+
+    if skip_trello:
+        print("Trello: вимкнено (--skip-trello)")
+    elif sync_existing_trello:
+        print("Trello: нові картки + синхронізація всіх існуючих (--sync-existing-trello)")
+    else:
+        print("Trello: нові/несинхронізовані картки (без повного оновлення існуючих)")
+
     # Крок 0: Перевірка наявності ВМД за вказаний діапазон
     vmd_uids = None
     if date_from or date_to:
+        show_mail_details = not args.auto_update
         print("Перевірка наявності ВМД на пошті...")
         print()
-        vmd_report, vmd_uids = get_vmd_count_report(date_from, date_to, show_details=True)
+        vmd_report, vmd_uids_found = get_vmd_count_report(
+            date_from, date_to, show_details=show_mail_details
+        )
         total_vmd_count = sum(vmd_report.values())
-        
+
         if total_vmd_count == 0:
-            print("\nВМД не знайдено за вказаний діапазон дат. Завантаження не буде виконано.")
-            return {
-                "downloaded": 0,
-                "processed": 0,
-                "parsed_records": 0,
-                "excel_path": None,
-                "errors": []
-            }
-        
-        print(f"\nЗнайдено {total_vmd_count} ВМД для завантаження.")
-        print("Починаємо завантаження...")
-        print()
-    
+            print(
+                "\nВМД на пошті за діапазон не знайдено. "
+                "Продовжуємо повну воронку (БД, Excel, Trello)..."
+            )
+            vmd_uids = None
+        else:
+            vmd_uids = vmd_uids_found
+            print(f"\nЗнайдено {total_vmd_count} ВМД для завантаження.")
+            print("Починаємо завантаження...")
+            print()
+
     # Створюємо оркестратор з параметрами
     orchestrator = VMDOrchestrator(
         date_from=date_from,
         date_to=date_to,
         sort_by_date=sort_by_date
     )
-    
+
     # Запускаємо пайплайн з передачею UID (якщо є)
-    results = await orchestrator.run_full_pipeline(vmd_uids=vmd_uids)
+    results = await orchestrator.run_full_pipeline(
+        vmd_uids=vmd_uids,
+        skip_trello=skip_trello,
+        sync_existing_trello_cards=sync_existing_trello,
+    )
     
     # Виводимо результати
     print("\n" + "="*60)
@@ -215,7 +245,9 @@ async def main():
 if __name__ == "__main__":
     try:
         results = asyncio.run(main())
-        sys.exit(0 if results['parsed_records'] > 0 else 1)
+        # 0 нових записів — успішний прогін (нічого нового), не помилка.
+        has_errors = bool(results and results.get("errors"))
+        sys.exit(1 if has_errors else 0)
     except KeyboardInterrupt:
         print("\n\nОперацію скасовано користувачем")
         sys.exit(1)

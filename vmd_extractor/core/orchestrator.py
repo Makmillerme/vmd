@@ -86,7 +86,7 @@ class VMDOrchestrator:
             self._exporter = ExcelExporter(self._extract_data_dir, database=self.database)
         return self._exporter
     
-    async def run_full_pipeline(self, vmd_uids: Optional[List[Tuple[str, bytes]]] = None, skip_trello: bool = False, sync_existing_trello_cards: bool = True) -> Dict:
+    async def run_full_pipeline(self, vmd_uids: Optional[List[Tuple[str, bytes]]] = None, skip_trello: bool = False, sync_existing_trello_cards: bool = False) -> Dict:
         """
         Запуск повного пайплайну обробки ВМД
         
@@ -98,6 +98,7 @@ class VMDOrchestrator:
                                        На ручному режимі зазвичай False (запитується окремо).
         """
         self._sync_existing_trello_cards = sync_existing_trello_cards
+        self._skip_trello = skip_trello
         # Мінімальний вивід для GUI режиму
         print("\nЗапуск обробки ВМД...")
         
@@ -248,7 +249,7 @@ class VMDOrchestrator:
                     logger.debug("Немає нових транспортних засобів для синхронізації з Trello")
                 
                 # Синхронізуємо дані всіх існуючих карток з Trello (тільки якщо дозволено)
-                if getattr(self, "_sync_existing_trello_cards", True):
+                if getattr(self, "_sync_existing_trello_cards", False):
                     await self._sync_all_existing_cards_from_trello()
                 
                 # Завантажуємо Excel в Trello якщо налаштовано та не пропущено Trello
@@ -392,19 +393,22 @@ class VMDOrchestrator:
         await self._backfill_pdf_urls_from_disk()
         
         # Синхронізація з Trello: перевіряємо чи є несинхронізовані vehicles за поточним діапазоном дат
-        if TRELLO_ENABLED:
+        if not getattr(self, "_skip_trello", False) and TRELLO_ENABLED:
             await self._sync_unsynced_vehicles_in_current_range()
             # Синхронізація даних існуючих карток тільки якщо дозволено
-            if getattr(self, "_sync_existing_trello_cards", True):
+            if getattr(self, "_sync_existing_trello_cards", False):
                 await self._sync_all_existing_cards_from_trello()
-        
+        elif getattr(self, "_skip_trello", False):
+            print("\nСинхронізація з Trello пропущена (режим лише БД)")
+
         print("\nЕкспорт в Excel...")
         excel_path = self.exporter.export_all_tables()
         results["excel_path"] = excel_path
         if excel_path:
             print(f"   Excel експортовано: {excel_path}")
             # Завантажуємо Excel в Trello якщо налаштовано
-            await self._upload_excel_to_trello(excel_path)
+            if not getattr(self, "_skip_trello", False):
+                await self._upload_excel_to_trello(excel_path)
         else:
             print("   Увага: Excel файл не експортовано (перевірте повідомлення вище)")
 

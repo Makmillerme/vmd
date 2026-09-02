@@ -55,16 +55,20 @@ async def run_downloader_with_dates(
     vmd_report, vmd_uids = get_vmd_count_report(date_from, date_to, show_details=False, show_progress=True)
     total_vmd_count = sum(vmd_report.values())
     
-    if total_vmd_count == 0:
-        print("  ВМД не знайдено за вказаний діапазон дат.")
-        return None
-    
-    print(f"\n  Знайдено {total_vmd_count} ВМД для завантаження.\n")
-    
     sync_existing_cards = False
     if not skip_trello:
         sync_existing_cards = _ask_sync_existing_trello_cards()
-    
+
+    if total_vmd_count == 0:
+        print("  ВМД на пошті за діапазон не знайдено.")
+        if skip_trello:
+            print("  Нових даних для завантаження немає.")
+            return None
+        print("  Продовжуємо оновлення БД, Excel і Trello...\n")
+        vmd_uids = None
+    else:
+        print(f"\n  Знайдено {total_vmd_count} ВМД для завантаження.\n")
+
     # Запуск пайплайну
     orchestrator = VMDOrchestrator(
         date_from=date_from,
