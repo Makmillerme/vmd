@@ -27,6 +27,30 @@ from ..utils.common import current_time_iso
 
 logger = logging.getLogger(__name__)
 
+# Нормалізовані колонки vehicles. CREATE TABLE нижче їх містить для нових БД;
+# на існуючих volume (Docker) їх треба ADD COLUMN — інакше SELECT v.brand падає.
+VEHICLES_NORMALIZED_COLUMNS: Tuple[Tuple[str, str], ...] = (
+    ("vehicle_type", "TEXT"),
+    ("brand", "TEXT"),
+    ("uktzed", "TEXT"),
+    ("description", "TEXT"),
+    ("producer_country", "TEXT"),
+    ("gross_weight", "TEXT"),
+    ("net_weight", "TEXT"),
+    ("gross_weight_kg", "INTEGER"),
+    ("net_weight_kg", "INTEGER"),
+    ("payload_kg", "INTEGER"),
+    ("engine_cm3", "INTEGER"),
+    ("seats", "INTEGER"),
+    ("power_kw", "REAL"),
+    ("wheel_formula", "TEXT"),
+    ("year_model", "INTEGER"),
+    ("year_calendar", "INTEGER"),
+    ("quantity", "REAL"),
+    ("serial_number", "TEXT"),
+    ("unit_human", "TEXT"),
+)
+
 
 
 
@@ -146,6 +170,25 @@ class VMDDatabase:
                         pdf_url TEXT,
                         payload_json TEXT NOT NULL,
                         created_at TEXT NOT NULL,
+                        vehicle_type TEXT,
+                        brand TEXT,
+                        uktzed TEXT,
+                        description TEXT,
+                        producer_country TEXT,
+                        gross_weight TEXT,
+                        net_weight TEXT,
+                        gross_weight_kg INTEGER,
+                        net_weight_kg INTEGER,
+                        payload_kg INTEGER,
+                        engine_cm3 INTEGER,
+                        seats INTEGER,
+                        power_kw REAL,
+                        wheel_formula TEXT,
+                        year_model INTEGER,
+                        year_calendar INTEGER,
+                        quantity REAL,
+                        serial_number TEXT,
+                        unit_human TEXT,
                         FOREIGN KEY(processed_file_id) REFERENCES processed_files(id) ON DELETE CASCADE
                     );
 
@@ -285,6 +328,8 @@ class VMDDatabase:
                     await db.commit()
                     logger.info("Added brief_pdf_path column to vehicles table")
 
+            await self._ensure_vehicles_normalized_columns()
+
             # Додаємо UNIQUE constraint на vehicle_id для існуючих БД (якщо його немає)
             async with aiosqlite.connect(self.db_path) as db:
                 # Перевіряємо чи constraint вже існує
@@ -354,6 +399,139 @@ class VMDDatabase:
                             await db.rollback()
 
             self._initialized = True
+
+    async def _ensure_vehicles_normalized_columns(self) -> None:
+        """Додає brand/vehicle_type/... на існуючих БД, створених зі старою CREATE TABLE.
+
+        Не викликати initialize() звідси: метод уже крутиться під _init_lock.
+        """
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute("PRAGMA table_info(vehicles)")
+            existing = {row[1] for row in await cursor.fetchall()}
+            added: List[str] = []
+            for col_name, col_type in VEHICLES_NORMALIZED_COLUMNS:
+                if col_name not in existing:
+                    await db.execute(
+                        f"ALTER TABLE vehicles ADD COLUMN {col_name} {col_type}"
+                    )
+                    added.append(col_name)
+
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_vehicles_vehicle_type ON vehicles(vehicle_type)"
+            )
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_vehicles_brand ON vehicles(brand)"
+            )
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_vehicles_year_model ON vehicles(year_model)"
+            )
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_vehicles_uktzed ON vehicles(uktzed)"
+            )
+            await db.commit()
+
+            if added:
+                logger.info("Added vehicles columns: %s", ", ".join(added))
+
+            cursor = await db.execute(
+                """
+                SELECT COUNT(*) FROM vehicles
+                WHERE payload_json IS NOT NULL
+                  AND (brand IS NULL OR TRIM(brand) = '')
+                """
+            )
+            missing_brand = (await cursor.fetchone())[0]
+            if missing_brand:
+                backfilled = await self._backfill_vehicles_normalized_from_payload(db)
+                logger.info(
+                    "Backfilled normalized vehicles columns for %s rows",
+                    backfilled,
+                )
+
+    async def _backfill_vehicles_normalized_from_payload(self, db: aiosqlite.Connection) -> int:
+        """Заповнює нормалізовані колонки з payload_json (існуючі рядки після ALTER)."""
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """
+            SELECT id, payload_json FROM vehicles
+            WHERE payload_json IS NOT NULL
+              AND (brand IS NULL OR TRIM(brand) = '')
+            """
+        )
+        rows = await cursor.fetchall()
+        updated = 0
+
+        def _safe_int(val):
+            try:
+                return int(float(val)) if val not in (None, "") else None
+            except (ValueError, TypeError):
+                return None
+
+        def _safe_float(val):
+            try:
+                return float(val) if val not in (None, "") else None
+            except (ValueError, TypeError):
+                return None
+
+        for row in rows:
+            try:
+                payload = json.loads(row["payload_json"] or "{}")
+            except Exception:
+                continue
+            if not isinstance(payload, dict):
+                continue
+
+            await db.execute(
+                """
+                UPDATE vehicles SET
+                    vehicle_type = ?,
+                    brand = ?,
+                    uktzed = ?,
+                    description = ?,
+                    producer_country = ?,
+                    gross_weight = ?,
+                    net_weight = ?,
+                    gross_weight_kg = ?,
+                    net_weight_kg = ?,
+                    payload_kg = ?,
+                    engine_cm3 = ?,
+                    seats = ?,
+                    power_kw = ?,
+                    wheel_formula = ?,
+                    year_model = ?,
+                    year_calendar = ?,
+                    quantity = ?,
+                    serial_number = ?,
+                    unit_human = ?
+                WHERE id = ?
+                """,
+                (
+                    (payload.get("vehicle_type") or "").strip() or None,
+                    (payload.get("brand") or "").strip() or None,
+                    (payload.get("uktzed") or "").strip() or None,
+                    (payload.get("description") or "").strip() or None,
+                    (payload.get("producer_country") or "").strip() or None,
+                    str(payload.get("gross_weight") or "").strip() or None,
+                    str(payload.get("net_weight") or "").strip() or None,
+                    _safe_int(payload.get("gross_weight_kg")),
+                    _safe_int(payload.get("net_weight_kg")),
+                    _safe_int(payload.get("payload_kg")),
+                    _safe_int(payload.get("engine_cm3")),
+                    _safe_int(payload.get("seats")),
+                    _safe_float(payload.get("power_kw")),
+                    (payload.get("wheel_formula") or "").strip() or None,
+                    _safe_int(payload.get("year_model")),
+                    _safe_int(payload.get("year_calendar")),
+                    _safe_float(payload.get("quantity")),
+                    (payload.get("serial_number") or "").strip() or None,
+                    (payload.get("unit_human") or "").strip() or None,
+                    row["id"],
+                ),
+            )
+            updated += 1
+
+        await db.commit()
+        return updated
 
     async def fetch_known_hashes(self) -> List[str]:
         """Повертає список усіх збережених SHA256 (для швидкої перевірки дублікатів)."""
