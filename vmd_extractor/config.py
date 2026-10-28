@@ -93,6 +93,9 @@ LEGACY_EXTRACT_DATA_DIR = BASE_DIR / "vmd_extractor" / "extract_data"
 LEGACY_PDF_DIR = BASE_DIR / "vmd_extractor" / "pdf"
 LEGACY_TEMP_EXTRACTED_DIR = BASE_DIR / "vmd_extractor" / "temp_extracted"
 
+# Скільки несинхронізованих ТЗ створювати в Trello за один auto-прогон (без фільтра дат)
+TRELLO_UNSYNCED_BATCH = max(1, int(os.environ.get("VMD_TRELLO_UNSYNCED_BATCH", "40")))
+
 # ==================== Trello Налаштування ====================
 TRELLO_ENABLED = os.environ.get("TRELLO_ENABLED", "false").lower() == "true"
 TRELLO_API_KEY = os.environ.get("TRELLO_API_KEY", "")

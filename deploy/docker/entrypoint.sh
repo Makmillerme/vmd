@@ -13,6 +13,10 @@ case "${1:-daemon}" in
   health-check)
     exec python run_auto.py --health-check --max-age-hours "${MAX_AGE_HOURS:-8}"
     ;;
+  sync-vins)
+    shift
+    exec python vmd_extractor/cli/sync_trello_vins.py "$@"
+    ;;
   daemon)
     exec python run_auto.py
     ;;

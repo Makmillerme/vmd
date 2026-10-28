@@ -21,7 +21,8 @@ from .database import VMDDatabase
 from ..config import (
     FILES_DIR, EXTRACT_DATA_DIR, PDF_DIR, TEMP_EXTRACTED_DIR, DB_PATH, LOCAL_TZ,
     TRELLO_ENABLED, TRELLO_API_KEY, TRELLO_API_TOKEN, TRELLO_DB_CARD,
-    TRELLO_BOARD_ID, TRELLO_LIST_ID, get_trello_label_for_vehicle_type_async,
+    TRELLO_BOARD_ID, TRELLO_LIST_ID, TRELLO_UNSYNCED_BATCH,
+    get_trello_label_for_vehicle_type_async,
     DISALLOWED_TRELLO_TYPES,
 )
 from ..utils.pdf_handler import attach_pdf_links, build_pdf_filename
@@ -239,14 +240,10 @@ class VMDOrchestrator:
                     print(f"\nКрок 7: Синхронізація з Trello ({len(new_vehicle_ids)} нових транспортних засобів)...")
                     print("   Примітка: в Trello додаються тільки транспортні засоби з наявним типом техніки")
                     print("   (пропускаються: без типу техніки або 'Автомобіль легковий')")
-                    # Синхронізуємо тільки нові vehicles з поточного запуску
                     await self._sync_vehicles_to_trello(vehicle_ids=new_vehicle_ids)
-                    # Додатково синхронізуємо інші несинхронізовані vehicles в поточному діапазоні
-                    await self._sync_unsynced_vehicles_in_current_range(
-                        context="Додаткова синхронізація з Trello"
-                    )
-                else:
-                    logger.debug("Немає нових транспортних засобів для синхронізації з Trello")
+                await self._sync_unsynced_vehicles_in_current_range(
+                    context="Черга несинхронізованих Trello"
+                )
                 
                 # Синхронізуємо дані всіх існуючих карток з Trello (тільки якщо дозволено)
                 if getattr(self, "_sync_existing_trello_cards", False):
@@ -312,29 +309,47 @@ class VMDOrchestrator:
     
     async def _sync_unsynced_vehicles_in_current_range(self, context: str = "Синхронізація з Trello"):
         """
-        Додатково синхронізує несинхронізовані vehicles за поточним діапазоном дат.
-        Використовується, коли очищено таблицю trello_cards або пропущено попередні sync.
+        Створює картки Trello для несинхронізованих ТЗ (черга в БД).
+        Auto не обмежує датою вікна IMAP — інакше старі ВМД (інша create_at_ccd) не потрапляють у Trello.
         """
         if not TRELLO_ENABLED:
             return
-        
-        date_from_str, date_to_str = self._get_date_range_filters()
+
         unsynced_vehicles = await self.database.get_vehicles_for_trello_sync(
-            date_from=date_from_str,
-            date_to=date_to_str,
             exclude_synced=True,
+            limit=TRELLO_UNSYNCED_BATCH,
         )
-        
+
         if not unsynced_vehicles:
-            logger.debug("Не знайдено несинхронізованих транспортних засобів для синхронізації з Trello в поточному діапазоні")
+            logger.debug("Не знайдено несинхронізованих транспортних засобів для Trello")
             return
-        
+
         vehicle_ids = [v["id"] for v in unsynced_vehicles]
         prefix = context or "Синхронізація з Trello"
-        print(f"\n{prefix} ({len(vehicle_ids)} несинхронізованих vehicles за діапазоном)...")
+        print(
+            f"\n{prefix} ({len(vehicle_ids)} з черги несинхронізованих, "
+            f"ліміт {TRELLO_UNSYNCED_BATCH} за прогін)..."
+        )
         print("   Примітка: в Trello додаються тільки vehicles з наявним vehicle_type")
         print("   (пропускаються: без vehicle_type або 'Автомобіль легковий')")
         await self._sync_vehicles_to_trello(vehicle_ids=vehicle_ids)
+
+    async def sync_trello_for_vins(self, vins: List[str]) -> None:
+        """Створює картки Trello для конкретних VIN (операційний виклик)."""
+        if not TRELLO_ENABLED:
+            print("Trello вимкнено (TRELLO_ENABLED=false)")
+            return
+        normalized = [v.strip().upper() for v in vins if v and v.strip()]
+        if not normalized:
+            return
+        unsynced = await self.database.get_vehicles_for_trello_sync(
+            exclude_synced=True,
+            vins=normalized,
+        )
+        if not unsynced:
+            print("Немає несинхронізованих ТЗ для вказаних VIN (або VIN не знайдено).")
+            return
+        await self._sync_vehicles_to_trello(vehicle_ids=[v["id"] for v in unsynced])
     
     def _cleanup_downloaded_files(self):
         """Очищення завантажених файлів"""

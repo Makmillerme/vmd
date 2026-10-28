@@ -1345,14 +1345,18 @@ class VMDDatabase:
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
         exclude_synced: bool = True,
+        limit: Optional[int] = None,
+        vins: Optional[Sequence[str]] = None,
     ) -> List[Dict]:
         """
         Отримує список транспортних засобів для синхронізації з Trello
         
         Args:
-            date_from: Дата початку (ISO формат) - тільки vehicles з create_at_ccd >= date_from
-            date_to: Дата кінця (ISO формат) - тільки vehicles з create_at_ccd <= date_to
+            date_from: Дата початку (ISO формат) - фільтр по create_at_ccd або DATE(created_at)
+            date_to: Дата кінця (ISO формат)
             exclude_synced: Якщо True, виключає vehicles які вже синхронізовані з Trello
+            limit: Максимум записів (найстаріші в черзі спочатку)
+            vins: Якщо задано — лише ці VIN (date_from/date_to не застосовуються)
         """
         await self.initialize()
         async with aiosqlite.connect(self.db_path) as db:
@@ -1372,8 +1376,15 @@ class VMDDatabase:
                   AND v.vehicle_type != 'Автомобіль легковий'
             """
             params = []
+
+            if vins:
+                normalized_vins = [v.strip().upper() for v in vins if v and v.strip()]
+                if normalized_vins:
+                    placeholders = ",".join("?" for _ in normalized_vins)
+                    query += f" AND UPPER(v.vin) IN ({placeholders})"
+                    params.extend(normalized_vins)
             
-            if date_from:
+            if not vins and date_from:
                 date_from_date_only = date_from[:10] if len(date_from) >= 10 else date_from
                 query += """
                     AND (
@@ -1383,7 +1394,7 @@ class VMDDatabase:
                 """
                 params.extend([date_from_date_only, date_from_date_only])
 
-            if date_to:
+            if not vins and date_to:
                 date_to_date_only = date_to[:10] if len(date_to) >= 10 else date_to
                 query += """
                     AND (
@@ -1409,6 +1420,9 @@ class VMDDatabase:
                     CASE WHEN v.create_at_ccd IS NOT NULL THEN v.create_at_ccd ELSE DATE(v.created_at) END ASC,
                     v.created_at ASC
             """
+            if limit is not None and limit > 0:
+                query += " LIMIT ?"
+                params.append(limit)
             
             cursor = await db.execute(query, params)
             rows = await cursor.fetchall()
